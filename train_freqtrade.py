@@ -45,7 +45,10 @@ def main():
         if SAVE_PREPROCESSED_DATA:
             mpu.io.write(_preprocessed_data_file, data)
 
-    pair_data = data[PAIR][required_startup:]
+    pair_data = data[PAIR][required_startup:].copy()
+    pair_data.reset_index(drop=True, inplace=True)
+
+    del data
 
     price_data = pair_data[['date', 'open', 'close', 'high', 'low', 'volume']].copy()
 
