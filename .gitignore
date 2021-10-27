@@ -127,10 +127,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-# Project specific
-tensorboard/*
-logs/*
-models/*
-user_data/backtest_results/*
-user_data/data/*
