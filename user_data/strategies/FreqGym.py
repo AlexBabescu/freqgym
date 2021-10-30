@@ -7,24 +7,26 @@ import talib.abstract as ta
 from freqtrade.strategy.interface import IStrategy
 from pandas import DataFrame, Series
 from stable_baselines3.ppo.ppo import PPO
+from stable_baselines3.a2c.a2c import A2C
 from ta import add_all_ta_features
 
 
-class LoadRLModel(IStrategy):
+class FreqGym(IStrategy):
 
     # If you've used SimpleROIEnv then use this minimal_roi
-    # minimal_roi = {
-    #     "120": -10,
-    #     "60": 0.01,
-    #     "30": 0.02,
-    #     "0": 0.03
-    # }
-
     minimal_roi = {
-        "0": 100
+        "720": -10,
+        "600": 0.00001,
+        "60": 0.01,
+        "30": 0.02,
+        "0": 0.03
     }
 
-    stoploss = -0.20
+    # minimal_roi = {
+    #     "0": 100
+    # }
+
+    stoploss = -0.99
 
     # Trailing stop:
     trailing_stop = False
@@ -46,7 +48,7 @@ class LoadRLModel(IStrategy):
     window_size = None
 
     try:
-        model = PPO.load('models/best_model_FreqtradeEnv_PPO_20211027_065636')  # Note: Make sure you use the same policy as the one used to train
+        model = PPO.load('models/best_model_SimpleROIEnv_PPO_20211028_104631')  # Note: Make sure you use the same policy as the one used to train
         window_size = model.observation_space.shape[0]
     except Exception:
         pass
