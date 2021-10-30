@@ -11,7 +11,7 @@ from stable_baselines3.ppo.ppo import PPO
 from stable_baselines3.a2c.a2c import A2C
 
 from tb_callbacks import SaveOnStepCallback
-from trading_environments import FreqtradeEnv, SimpleROIEnv
+from trading_environments import FreqtradeEnv, SimpleROIEnv, GymAnytrading
 
 """Settings"""
 PAIR = "BTC/USDT"
@@ -57,25 +57,31 @@ def main():
     pair_data.fillna(0, inplace=True)
 
 
-    trading_env = FreqtradeEnv(
-        data=pair_data,
-        prices=price_data,
-        window_size=WINDOW_SIZE,  # how many past candles should it use as features
-        pair=PAIR,
-        stake_amount=freqtrade_config['stake_amount'],
-        punish_holding_amount=0,
-        )
+    # trading_env = FreqtradeEnv(
+    #     data=pair_data,
+    #     prices=price_data,
+    #     window_size=WINDOW_SIZE,  # how many past candles should it use as features
+    #     pair=PAIR,
+    #     stake_amount=freqtrade_config['stake_amount'],
+    #     punish_holding_amount=0,
+    #     )
 
     # trading_env = SimpleROIEnv(
     #     data=pair_data,
     #     prices=price_data,
     #     window_size=WINDOW_SIZE,  # how many past candles should it use as features
     #     required_startup=required_startup,
-    #     minimum_roi=0.03,  # 2% target ROI
-    #     roi_candles=48,
+    #     minimum_roi=0.02,  # 2% target ROI
+    #     roi_candles=24,  # 24 candles * 5m = 120 minutes
     #     punish_holding_amount=0,
     #     punish_missed_buy=True
     #     )
+
+    trading_env = GymAnytrading(
+        signal_features=pair_data,
+        prices=price_data.close,
+        window_size=WINDOW_SIZE,  # how many past candles should it use as features
+        )
 
     trading_env = Monitor(trading_env, LOG_DIR)
 
