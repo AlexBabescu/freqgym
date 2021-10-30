@@ -25,6 +25,7 @@ class FreqtradeEnv(gym.Env):
         window_size,
         pair,
         stake_amount,
+        stop_loss=-0.15,
         punish_holding_amount=0,
         fee=0.005
         ):
@@ -34,6 +35,8 @@ class FreqtradeEnv(gym.Env):
         self.prices = prices
         self.pair = pair
         self.stake_amount = stake_amount
+        self.stop_loss = stop_loss
+        assert self.stop_loss <= 0, "`stoploss` should be less or equal to 0"
         self.punish_holding_amount = punish_holding_amount
         assert self.punish_holding_amount <= 0, "`punish_holding_amount` should be less or equal to 0"
         self.fee = fee
@@ -58,6 +61,11 @@ class FreqtradeEnv(gym.Env):
     def _take_action(self, action):
         if action == Actions.Hold.value:
             self._reward = self.punish_holding_amount
+            if (self.opened_trade != None):
+                profit_percent = self.opened_trade.calc_profit_ratio(rate=self.prices.loc[self._current_tick].open)
+                if (profit_percent <= self.stop_loss):
+                    self._reward = profit_percent
+                    self.opened_trade = None
             return
 
         if action == Actions.Buy.value:
