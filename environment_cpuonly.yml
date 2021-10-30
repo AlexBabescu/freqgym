@@ -69,7 +69,7 @@ dependencies:
     # 4/5 req baselines3
     - pytorch
     - cpuonly
-    - tensorboardx
+    - tensorboard
 
     - pip:
         - mpu

@@ -1,6 +1,6 @@
 
 {
-    "strategy": "LoadRLModel",
+    "strategy": "FreqGym_normalized",
     "max_open_trades": 5,
     "stake_currency": "USDT",
     "stake_amount": 200,

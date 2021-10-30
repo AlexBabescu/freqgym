@@ -72,7 +72,7 @@ dependencies:
     # 4/5 req baselines3
     - pytorch
     - cudatoolkit=11.3
-    - tensorboardx
+    - tensorboard
 
     - pip:
         - mpu

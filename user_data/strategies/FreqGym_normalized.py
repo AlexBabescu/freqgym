@@ -47,7 +47,7 @@ class FreqGym_normalized(IStrategy):
     window_size = None
 
     try:
-        model = PPO.load('models/best_model_SimpleROIEnv_PPO_20211028_104631')  # Note: Make sure you use the same policy as the one used to train
+        model = PPO.load('models/best_model')  # Note: Make sure you use the same policy as the one used to train
         window_size = model.observation_space.shape[0]
     except Exception:
         pass
@@ -141,8 +141,8 @@ class FreqGym_normalized(IStrategy):
             dataframe[f'stochrsi_k_{period}'] = normalize(stoch_rsi['fastk'], 0, 100)
             dataframe[f'stochrsi_d_{period}'] = normalize(stoch_rsi['fastd'], 0, 100)
 
-            # CORREL - Pearson's Correlation Coefficient (r)
-            dataframe[f'correl_{period}'] = normalize(ta.CORREL(dataframe, timeperiod=period), -1, 1)
+            # # CORREL - Pearson's Correlation Coefficient (r)
+            # dataframe[f'correl_{period}'] = normalize(ta.CORREL(dataframe, timeperiod=period), -1, 1)  # this is buggy
 
             # LINEARREG_ANGLE - Linear Regression Angle
             dataframe[f'linangle_{period}'] = normalize(ta.LINEARREG_ANGLE(dataframe, timeperiod=period), -90, 90)

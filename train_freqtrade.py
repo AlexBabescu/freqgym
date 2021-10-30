@@ -8,6 +8,7 @@ from freqtrade.data import history
 from freqtrade.resolvers import StrategyResolver
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.ppo.ppo import PPO
+from stable_baselines3.a2c.a2c import A2C
 
 from tb_callbacks import SaveOnStepCallback
 from trading_environments import FreqtradeEnv, SimpleROIEnv
@@ -15,7 +16,7 @@ from trading_environments import FreqtradeEnv, SimpleROIEnv
 """Settings"""
 PAIR = "BTC/USDT"
 TRAINING_RANGE = "20210601-20210901"
-WINDOW_SIZE = 1
+WINDOW_SIZE = 10
 LOAD_PREPROCESSED_DATA = False  # useful if you have to calculate a lot of features
 SAVE_PREPROCESSED_DATA = True
 LEARNING_TIME_STEPS = int(1e+6)
@@ -70,8 +71,8 @@ def main():
     #     prices=price_data,
     #     window_size=WINDOW_SIZE,  # how many past candles should it use as features
     #     required_startup=required_startup,
-    #     minimum_roi=0.02,  # 2% target ROI
-    #     roi_candles=24,  # 24 candles * 5m = 120 minutes
+    #     minimum_roi=0.03,  # 2% target ROI
+    #     roi_candles=48,
     #     punish_holding_amount=0,
     #     punish_missed_buy=True
     #     )
@@ -91,7 +92,7 @@ def main():
         "MlpPolicy",
         trading_env,
         verbose=0,
-        device='cuda',  # Comment this if you don't have a nvidia gpu
+        device='auto',
         tensorboard_log=TENSORBOARD_LOG,
         # policy_kwargs=policy_kwargs
     )
