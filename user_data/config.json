@@ -73,7 +73,7 @@
     "api_server": {
         "enabled": true,
         "listen_ip_address": "127.0.0.1",
-        "listen_port": 10080,
+        "listen_port": 20080,
         "verbosity": "error",
         "enable_openapi": false,
         "jwt_secret_key": "595e9cb58c29748270a739db7aa127fc30a9ecfbf0d11fc9d977de4d8a86037f",
