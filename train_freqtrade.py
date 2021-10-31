@@ -103,7 +103,7 @@ def main():
         # policy_kwargs=policy_kwargs
     )
 
-    base_name = f"{trading_env.env.__class__.__name__}_{model.__class__.__name__}_{start_date}"
+    base_name = f"{strategy.get_strategy_name()}_{trading_env.env.__class__.__name__}_{model.__class__.__name__}_{start_date}"
 
     tb_callback = SaveOnStepCallback(
         check_freq=5000,
