@@ -1,21 +1,37 @@
 import datetime
+from os import access
 from pathlib import Path
 
 import mpu
+import tensortrade.env.default as default
 import torch as th
 from freqtrade.configuration import Configuration, TimeRange
 from freqtrade.data import history
+from freqtrade.data.dataprovider import DataProvider
+from freqtrade.exchange import Exchange as FreqtradeExchange
 from freqtrade.resolvers import StrategyResolver
+from stable_baselines3.a2c.a2c import A2C
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.ppo.ppo import PPO
-from stable_baselines3.a2c.a2c import A2C
+from tensortrade.env.default.actions import BSH, TensorTradeActionScheme
+from tensortrade.env.default.rewards import (PBR, RiskAdjustedReturns,
+                                             SimpleProfit,
+                                             TensorTradeRewardScheme)
+from tensortrade.env.generic import ActionScheme, TradingEnv
+from tensortrade.feed.core import DataFeed, NameSpace, Stream
+from tensortrade.oms.exchanges import Exchange, ExchangeOptions
+from tensortrade.oms.instruments import BTC, ETH, LTC, USD, Instrument
+from tensortrade.oms.services.execution.simulated import execute_order
+from tensortrade.oms.wallets import Portfolio, Wallet
 
 from tb_callbacks import SaveOnStepCallback
-from trading_environments import FreqtradeEnv, SimpleROIEnv, GymAnytrading
+from trading_environments import FreqtradeEnv, GymAnytrading, SimpleROIEnv
+
+from tensortrade.oms.orders import proportion_order
 
 """Settings"""
-PAIR = "BTC/USDT"
-TRAINING_RANGE = "20210601-20210901"
+PAIR = "ADA/USDT"
+TRAINING_RANGE = "20190101-20211231"
 WINDOW_SIZE = 10
 LOAD_PREPROCESSED_DATA = False  # useful if you have to calculate a lot of features
 SAVE_PREPROCESSED_DATA = True
@@ -23,15 +39,76 @@ LEARNING_TIME_STEPS = int(1e+6)
 LOG_DIR = "./logs/"
 TENSORBOARD_LOG = "./tensorboard/"
 MODEL_DIR = "./models/"
+USER_DATA = Path(__file__).parent / "user_data"
 """End of settings"""
 
-freqtrade_config = Configuration.from_files(['user_data/config.json'])
+freqtrade_config = Configuration.from_files([str(USER_DATA / "config.json")])
 _preprocessed_data_file = "preprocessed_data.pickle"
+from gym.spaces import Space, Discrete
+
+
+class BuySellHold(TensorTradeActionScheme):
+    """A simple discrete action scheme where the only options are to buy, sell,
+    or hold.
+
+    Parameters
+    ----------
+    cash : `Wallet`
+        The wallet to hold funds in the base intrument.
+    asset : `Wallet`
+        The wallet to hold funds in the quote instrument.
+    """
+
+    registered_name = "bsh"
+
+    def __init__(self, cash: 'Wallet', asset: 'Wallet'):
+        super().__init__()
+        self.cash = cash
+        self.asset = asset
+
+        self.listeners = []
+        self.action = 0
+
+    @property
+    def action_space(self):
+        return Discrete(3)
+
+    def attach(self, listener):
+        self.listeners += [listener]
+        return self
+
+    def get_orders(self, action: int, portfolio: 'Portfolio') -> 'Order':
+        order = None
+
+        if action == 2:  # Hold
+            return []
+
+        if action == 0:  # Buy
+            if self.cash.balance == 0:
+                return []
+            order = proportion_order(portfolio, self.cash, self.asset, 1.0)
+
+        if action == 1:  # Sell
+            if self.asset.balance == 0:
+                return []
+            order = proportion_order(portfolio, self.asset, self.cash, 1.0)
+
+        self.action = action
+
+        for listener in self.listeners:
+            listener.on_action(action)
+
+        return [order]
+
+    def reset(self):
+        super().reset()
+        self.action = 0
 
 
 def main():
 
     strategy = StrategyResolver.load_strategy(freqtrade_config)
+    strategy.dp = DataProvider(freqtrade_config, FreqtradeExchange(freqtrade_config), None)
     required_startup = strategy.startup_candle_count
     timeframe = freqtrade_config.get('timeframe')
     data = dict()
@@ -41,8 +118,8 @@ def main():
         data = mpu.io.read(_preprocessed_data_file)
         assert PAIR in data, f"Loaded preprocessed data does not contain pair {PAIR}!"
     else:
-        data = _load_data(freqtrade_config, PAIR, timeframe, TRAINING_RANGE, WINDOW_SIZE)
-        data = strategy.advise_all_indicators(data)
+        data = _load_data(freqtrade_config, timeframe, TRAINING_RANGE)
+        data = strategy.advise_all_indicators({PAIR:data[PAIR]})
         if SAVE_PREPROCESSED_DATA:
             mpu.io.write(_preprocessed_data_file, data)
 
@@ -77,13 +154,57 @@ def main():
     #     punish_missed_buy=True
     #     )
 
-    trading_env = GymAnytrading(
-        signal_features=pair_data,
-        prices=price_data.close,
-        window_size=WINDOW_SIZE,  # how many past candles should it use as features
-        )
+    ADA = Instrument("ADA", 3, "Cardano")
 
-    trading_env = Monitor(trading_env, LOG_DIR)
+    price = Stream.source(list(price_data["close"]), dtype="float").rename("USD-ADA")
+
+    exchange_options = ExchangeOptions(commission=0.0035)
+    binance = Exchange("binance", service=execute_order, options=exchange_options)(price)
+
+    cash = Wallet(binance, 1000 * USD)
+    asset = Wallet(binance, 0 * ADA)
+
+    portfolio = Portfolio(USD, [cash, asset])
+
+
+    features = [Stream.source(list(pair_data[c]), dtype="float").rename(c) for c in pair_data.columns]
+
+    feed = DataFeed(features)
+    feed.compile()
+
+    renderer_feed = DataFeed(
+        [
+            Stream.source(list(price_data["date"])).rename("date"),
+            Stream.source(list(price_data["open"]), dtype="float").rename("open"),
+            Stream.source(list(price_data["high"]), dtype="float").rename("high"),
+            Stream.source(list(price_data["low"]), dtype="float").rename("low"),
+            Stream.source(list(price_data["close"]), dtype="float").rename("close"),
+            Stream.source(list(price_data["volume"]), dtype="float").rename("volume"),
+        ]
+    )
+
+    action_scheme = BuySellHold(cash=cash, asset=asset)
+
+    reward_scheme = SimpleProfit(window_size=WINDOW_SIZE)
+
+    trading_env = default.create(
+        portfolio=portfolio,
+        action_scheme=action_scheme,
+        reward_scheme=reward_scheme,
+        feed=feed,
+        renderer_feed=renderer_feed,
+        renderer='screen-log',
+        window_size=WINDOW_SIZE,
+        max_allowed_loss=0.10,
+    )
+
+    # trading_env = GymAnytrading(
+    #     signal_features=pair_data,
+    #     prices=price_data.close,
+    #     window_size=WINDOW_SIZE,  # how many past candles should it use as features
+    #     )
+
+    trading_env = Monitor(trading_env, LOG_DIR, info_keywords=('net_worth',))
 
     # Optional policy_kwargs
     # see https://stable-baselines3.readthedocs.io/en/master/guide/custom_policy.html?highlight=policy_kwargs#custom-network-architecture
@@ -98,15 +219,15 @@ def main():
         "MlpPolicy",
         trading_env,
         verbose=0,
-        device='auto',
+        device='cuda',
         tensorboard_log=TENSORBOARD_LOG,
         # policy_kwargs=policy_kwargs
     )
 
-    base_name = f"{strategy.get_strategy_name()}_{trading_env.env.__class__.__name__}_{model.__class__.__name__}_{start_date}"
+    base_name = f"{strategy.get_strategy_name()}_TensorTrade_{model.__class__.__name__}_{start_date}"
 
     tb_callback = SaveOnStepCallback(
-        check_freq=5000,
+        check_freq=10000,
         save_name=f"best_model_{base_name}",
         save_dir=MODEL_DIR,
         log_dir=LOG_DIR,
@@ -122,15 +243,15 @@ def main():
     model.save(f"{MODEL_DIR}final_model_{base_name}")
 
 
-def _load_data(config, pair, timeframe, timerange, window_size):
+def _load_data(config, timeframe, timerange):
     timerange = TimeRange.parse_timerange(timerange)
 
     return history.load_data(
         datadir=config['datadir'],
-        pairs=[pair],
+        pairs=config['pairs'],
         timeframe=timeframe,
         timerange=timerange,
-        startup_candles=window_size + 1,
+        startup_candles=config['startup_candle_count'],
         fail_without_data=True,
         data_format=config.get('dataformat_ohlcv', 'json'),
     )

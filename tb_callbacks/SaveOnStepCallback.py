@@ -27,6 +27,9 @@ class SaveOnStepCallback(BaseCallback):
         # total_reward = self.training_env.buf_infos[0]['total_reward']
         # self.logger.record('total_reward', total_reward)
 
+        net_worth = self.training_env.buf_infos[0]['net_worth']
+        self.logger.record('net_worth', net_worth)
+
         if self.n_calls % self.check_freq == 0:
             # Retrieve training reward
             x, y = ts2xy(load_results(str(self.log_dir)), 'timesteps')

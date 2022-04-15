@@ -6,7 +6,7 @@
     "stake_amount": 200,
     "tradable_balance_ratio": 0.99,
     "fiat_display_currency": "USD",
-    "timeframe": "5m",
+    "timeframe": "15m",
     "dry_run": true,
     "dry_run_wallet": 1000,
     "cancel_open_orders_on_exit": false,
@@ -40,7 +40,7 @@
             "rateLimit": 200
         },
         "pair_whitelist": [
-            "BTC/USDT"
+            "ADA/USDT"
         ],
         "pair_blacklist": [
             "BNB/.*"
@@ -79,7 +79,7 @@
         "jwt_secret_key": "595e9cb58c29748270a739db7aa127fc30a9ecfbf0d11fc9d977de4d8a86037f",
         "CORS_origins": [],
         "username": "freqtrader",
-        "password": ""
+        "password": "freqtrader"
     },
     "bot_name": "freqtrade",
     "initial_state": "running",
