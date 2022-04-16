@@ -10,6 +10,7 @@ from freqtrade.data import history
 from freqtrade.data.dataprovider import DataProvider
 from freqtrade.exchange import Exchange as FreqtradeExchange
 from freqtrade.resolvers import StrategyResolver
+from gym.spaces import Discrete, Space
 from stable_baselines3.a2c.a2c import A2C
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.ppo.ppo import PPO
@@ -21,21 +22,20 @@ from tensortrade.env.generic import ActionScheme, TradingEnv
 from tensortrade.feed.core import DataFeed, NameSpace, Stream
 from tensortrade.oms.exchanges import Exchange, ExchangeOptions
 from tensortrade.oms.instruments import BTC, ETH, LTC, USD, Instrument
+from tensortrade.oms.orders import proportion_order
 from tensortrade.oms.services.execution.simulated import execute_order
 from tensortrade.oms.wallets import Portfolio, Wallet
 
 from tb_callbacks import SaveOnStepCallback
 from trading_environments import FreqtradeEnv, GymAnytrading, SimpleROIEnv
 
-from tensortrade.oms.orders import proportion_order
-
 """Settings"""
 PAIR = "ADA/USDT"
-TRAINING_RANGE = "20190101-20211231"
+TRAINING_RANGE = "20210901-20211231"
 WINDOW_SIZE = 10
 LOAD_PREPROCESSED_DATA = False  # useful if you have to calculate a lot of features
 SAVE_PREPROCESSED_DATA = True
-LEARNING_TIME_STEPS = int(1e+6)
+LEARNING_TIME_STEPS = int(1e+9)
 LOG_DIR = "./logs/"
 TENSORBOARD_LOG = "./tensorboard/"
 MODEL_DIR = "./models/"
@@ -44,7 +44,7 @@ USER_DATA = Path(__file__).parent / "user_data"
 
 freqtrade_config = Configuration.from_files([str(USER_DATA / "config.json")])
 _preprocessed_data_file = "preprocessed_data.pickle"
-from gym.spaces import Space, Discrete
+from gym.spaces import Discrete, Space
 
 
 class BuySellHold(TensorTradeActionScheme):
@@ -54,7 +54,7 @@ class BuySellHold(TensorTradeActionScheme):
     Parameters
     ----------
     cash : `Wallet`
-        The wallet to hold funds in the base intrument.
+        The wallet to hold funds in the base instrument.
     asset : `Wallet`
         The wallet to hold funds in the quote instrument.
     """
@@ -67,7 +67,6 @@ class BuySellHold(TensorTradeActionScheme):
         self.asset = asset
 
         self.listeners = []
-        self.action = 0
 
     @property
     def action_space(self):
@@ -77,7 +76,7 @@ class BuySellHold(TensorTradeActionScheme):
         self.listeners += [listener]
         return self
 
-    def get_orders(self, action: int, portfolio: 'Portfolio') -> 'Order':
+    def get_orders(self, action: int, portfolio: 'Portfolio'):
         order = None
 
         if action == 2:  # Hold
@@ -93,8 +92,6 @@ class BuySellHold(TensorTradeActionScheme):
                 return []
             order = proportion_order(portfolio, self.asset, self.cash, 1.0)
 
-        self.action = action
-
         for listener in self.listeners:
             listener.on_action(action)
 
@@ -102,7 +99,6 @@ class BuySellHold(TensorTradeActionScheme):
 
     def reset(self):
         super().reset()
-        self.action = 0
 
 
 def main():
@@ -185,7 +181,10 @@ def main():
 
     action_scheme = BuySellHold(cash=cash, asset=asset)
 
-    reward_scheme = SimpleProfit(window_size=WINDOW_SIZE)
+    # reward_scheme = PBR(price)
+    reward_scheme = SimpleProfit(
+        window_size=8
+    )
 
     trading_env = default.create(
         portfolio=portfolio,
@@ -193,9 +192,8 @@ def main():
         reward_scheme=reward_scheme,
         feed=feed,
         renderer_feed=renderer_feed,
-        renderer='screen-log',
         window_size=WINDOW_SIZE,
-        max_allowed_loss=0.10,
+        max_allowed_loss=0.50,
     )
 
     # trading_env = GymAnytrading(
@@ -211,17 +209,20 @@ def main():
     # policy_kwargs = dict(activation_fn=th.nn.ReLU,
     #                  net_arch=[dict(pi=[32, 32], vf=[32, 32])])
     # policy_kwargs = dict(activation_fn=th.nn.Tanh, net_arch=[32, dict(pi=[64,  64], vf=[64, 64])])
-    policy_kwargs = dict(net_arch=[32, dict(pi=[64,  64], vf=[64, 64])])
+    policy_kwargs = dict(net_arch = [128, dict(pi=[128, 128, 128], vf=[128, 128, 128])])
 
     start_date = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     model = PPO(  # See https://stable-baselines3.readthedocs.io/en/master/guide/algos.html for other algos with discrete action space
-        "MlpPolicy",
+        "MlpPolicy",  # MlpPolicy MultiInputPolicy
         trading_env,
         verbose=0,
         device='cuda',
         tensorboard_log=TENSORBOARD_LOG,
-        # policy_kwargs=policy_kwargs
+        # n_steps = len(pair_data),
+        # batch_size = 1000,
+        # n_epochs = 20,
+        policy_kwargs=policy_kwargs
     )
 
     base_name = f"{strategy.get_strategy_name()}_TensorTrade_{model.__class__.__name__}_{start_date}"

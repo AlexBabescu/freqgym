@@ -40,7 +40,12 @@
             "rateLimit": 200
         },
         "pair_whitelist": [
-            "ADA/USDT"
+            "ETH/USDT",
+            "ADA/USDT",
+            "EOS/USDT",
+            "XLM/USDT",
+            "LTC/USDT",
+            "TRX/USDT"
         ],
         "pair_blacklist": [
             "BNB/.*"

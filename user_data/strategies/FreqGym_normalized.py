@@ -9,17 +9,19 @@ from pandas import DataFrame
 from stable_baselines3.ppo.ppo import PPO
 from stable_baselines3.a2c.a2c import A2C
 from freqtrade.strategy import merge_informative_pair
+import time
 
 
 class FreqGym_normalized(IStrategy):
     # # If you've used SimpleROIEnv then use this minimal_roi
-    minimal_roi = {"720": -10, "600": 0.00001, "60": 0.01, "30": 0.02, "0": 0.03}
+    minimal_roi = {"770": -10, "600": 0.00001, "60": 0.01, "30": 0.02, "0": 0.03}
 
     # minimal_roi = {
-    #     "0": 100
+    #     # "1440": -10
+    #     "0": 10,
     # }
 
-    stoploss = -0.99
+    stoploss = -0.10
 
     # Trailing stop:
     trailing_stop = False
@@ -43,6 +45,7 @@ class FreqGym_normalized(IStrategy):
     freqtrade_columns = ["date", "open", "close", "high", "low", "volume", "buy", "sell", "buy_tag", "exit_tag"]
     informative_freqtrade_columns = [f"{c}_1h" for c in freqtrade_columns]
     btc_freqtrade_columns = [f"{c}_btc_1h" for c in freqtrade_columns]
+    indicators = None
 
     try:
         model = PPO.load("models/best_model")  # Note: Make sure you use the same policy as the one used to train
@@ -50,12 +53,12 @@ class FreqGym_normalized(IStrategy):
     except Exception:
         pass
 
-    timeperiods = [8, 16, 32, 64, 128]
+    timeperiods = [8, 16, 32]
 
     def informative_pairs(self):
         pairs = self.dp.current_whitelist()
         informative_pairs = [(pair, self.informative_timeframe) for pair in pairs]
-        informative_pairs += [("BTC/USDT", "5m")]
+        informative_pairs += [("BTC/USDT", self.informative_timeframe)]
         return informative_pairs
 
     def generate_features(self, df):
@@ -176,10 +179,10 @@ class FreqGym_normalized(IStrategy):
 
         dataframe.fillna(0, inplace=True)
 
-        indicators = dataframe[dataframe.columns[~dataframe.columns.isin(self.freqtrade_columns)]]
+        self.indicators = dataframe[dataframe.columns[~dataframe.columns.isin(self.freqtrade_columns)]].to_numpy()
 
-        assert all(indicators.max() < 1.00001) and all(
-            indicators.min() > -0.00001
+        assert (
+            self.indicators.max() < 1.00001 and self.indicators.min() > -0.00001
         ), "Error, values are not normalized!"
 
         return dataframe
@@ -212,18 +215,88 @@ class FreqGym_normalized(IStrategy):
 
     def rl_model_predict(self, dataframe):
 
-        output = pd.DataFrame(np.zeros((len(dataframe), 1)))
-        indicators = dataframe[dataframe.columns[~dataframe.columns.isin(self.freqtrade_columns)]].fillna(0).to_numpy()
+        output = pd.DataFrame(np.full((len(dataframe), 1), 2))
 
-        #  TODO: This is slow and ugly, must use .rolling
-        for window in range(self.window_size, len(dataframe)):
-            start = window - self.window_size
-            end = window
-            observation = indicators[start:end]
+        # start_time = time.time()
+        def _predict(window):
+            observation = self.indicators[window.index]
             res, _ = self.model.predict(observation, deterministic=True)
-            output.loc[end] = res
+            return res
+
+        output = output.rolling(window=self.window_size).apply(_predict)
+        # print("--- rolling %s seconds ---" % (time.time() - start_time))
+
+        # start_time = time.time()
+        # for window in range(self.startup_candle_count, len(dataframe)):
+        #     start = window - self.window_size + 1
+        #     end = window
+        #     observation = self.indicators[start:end+1]
+        #     res, _ = self.model.predict(observation, deterministic=True)
+        #     output.iloc[end] = res
+        # print("--- forloop %s seconds ---" % (time.time() - start_time))
 
         return output
+
+
+class FreqGym_normalizedDCA(FreqGym_normalized):
+    # DCA
+    position_adjustment_enable = True
+    max_entry_position_adjustment = 2
+    max_dca_multiplier = 1.25
+    dca_stake_multiplier = 1.25
+
+    # This is called when placing the initial order (opening trade)
+    def custom_stake_amount(
+        self,
+        pair: str,
+        current_time,
+        current_rate: float,
+        proposed_stake: float,
+        min_stake: float,
+        max_stake: float,
+        **kwargs,
+    ) -> float:
+
+        if (self.config["position_adjustment_enable"] == True) and (self.config["stake_amount"] == "unlimited"):
+            return self.wallets.get_total_stake_amount() / self.config["max_open_trades"] / self.max_dca_multiplier
+        else:
+            return proposed_stake
+
+    def adjust_trade_position(
+        self,
+        trade,
+        current_time,
+        current_rate: float,
+        current_profit: float,
+        min_stake: float,
+        max_stake: float,
+        **kwargs,
+    ):
+        if current_profit > -0.05:
+            return None
+
+        # Obtain pair dataframe (just to show how to access it)
+        dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
+        # Only buy when not actively falling price.
+        last_candle = dataframe.iloc[-1].squeeze()
+        previous_candle = dataframe.iloc[-2].squeeze()
+        # if previous_candle['close'] < last_candle['close']:
+        #     return None
+
+        filled_buys = trade.select_filled_orders("buy")
+        count_of_buys = len(filled_buys)
+
+        if 0 < count_of_buys <= self.max_entry_position_adjustment:
+            try:
+                # This returns first order stake size
+                stake_amount = filled_buys[0].cost
+                # This then calculates current safety order size
+                stake_amount = stake_amount * self.dca_stake_multiplier
+                return stake_amount
+            except Exception as exception:
+                return None
+
+        return None
 
 
 def normalize(data, min_value, max_value):
