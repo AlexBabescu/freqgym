@@ -1,0 +1,76 @@
+{
+    "log_sys_usage": true,
+    "env": "MyTrainingEnv",
+    "env_config": {
+        "window_size": 14,
+        "reward_window_size": 7,
+        "max_allowed_loss": 0.1,
+        "data_file": "S:\\Documents\\freqgym\\TRAINING_PAIR.pickle"
+    },
+    "log_level": "INFO",
+    "framework": "torch",
+    "ignore_worker_failures": true,
+    "num_workers": 11,
+    "num_envs_per_worker": 2,
+    "num_gpus": 0,
+    "clip_rewards": true,
+    "lr": 0.0005462354824599521,
+    "lr_schedule": [
+        [
+            0,
+            0.1
+        ],
+        [
+            100,
+            0.01
+        ],
+        [
+            1000,
+            0.001
+        ],
+        [
+            10000,
+            0.0001
+        ],
+        [
+            100000,
+            1e-05
+        ],
+        [
+            1000000,
+            1e-06
+        ],
+        [
+            10000000,
+            1e-07
+        ]
+    ],
+    "gamma": 0.9092072333980323,
+    "lambda": 0.5665471191852899,
+    "observation_filter": "MeanStdFilter",
+    "model": {
+        "_use_default_native_models": true,
+        "use_attention": false,
+        "max_seq_len": 10,
+        "attention_num_transformer_units": 1,
+        "attention_dim": 32,
+        "attention_memory_inference": 10,
+        "attention_memory_training": 10,
+        "attention_num_heads": 1,
+        "attention_head_dim": 32,
+        "attention_position_wise_mlp_dim": 32,
+        "vf_share_layers": true,
+		"use_lstm": true
+    },
+    "vf_loss_coeff": 0.6856584199683442,
+    "entropy_coeff": 0.05760324798772307,
+    "num_sgd_iter": 10,
+    "evaluation_interval": 1,
+    "evaluation_config": {
+        "env_config": {
+            "max_allowed_loss": 1.0,
+            "data_file": "S:\\Documents\\freqgym\\EVALUATION_PAIR.pickle"
+        },
+        "explore": false
+    }
+}
