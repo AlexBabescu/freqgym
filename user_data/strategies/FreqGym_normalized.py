@@ -11,15 +11,14 @@ from stable_baselines3.a2c.a2c import A2C
 from freqtrade.strategy import merge_informative_pair
 import time
 
-
 class FreqGym_normalized(IStrategy):
     # # If you've used SimpleROIEnv then use this minimal_roi
-    minimal_roi = {"770": -10, "600": 0.00001, "60": 0.01, "30": 0.02, "0": 0.03}
+    # minimal_roi = {"770": -10, "600": 0.00001, "60": 0.01, "30": 0.02, "0": 0.03}
 
-    # minimal_roi = {
-    #     # "1440": -10
-    #     "0": 10,
-    # }
+    minimal_roi = {
+        # "1440": -10
+        "0": 10,
+    }
 
     stoploss = -0.10
 
@@ -32,7 +31,7 @@ class FreqGym_normalized(IStrategy):
     timeframe = "15m"
     informative_timeframe = "1h"
 
-    use_sell_signal = False
+    use_sell_signal = True
 
     # Run "populate_indicators()" only for new candle.
     process_only_new_candles = False
