@@ -15,6 +15,7 @@ class SaveOnStepCallback(BaseCallback):
         self.log_dir = Path(log_dir)
         self.save_path = Path(save_dir) / save_name
         self.best_mean_reward = -np.inf
+        self.best_net_worth = -np.inf
 
         assert self.log_dir.exists()
         assert Path(save_dir).exists()
@@ -26,6 +27,9 @@ class SaveOnStepCallback(BaseCallback):
 
         # total_reward = self.training_env.buf_infos[0]['total_reward']
         # self.logger.record('total_reward', total_reward)
+
+        net_worth = self.training_env.buf_infos[0]['net_worth']
+        self.logger.record('net_worth', net_worth)
 
         if self.n_calls % self.check_freq == 0:
             # Retrieve training reward
@@ -45,3 +49,13 @@ class SaveOnStepCallback(BaseCallback):
                     self.model.save(self.save_path)  # type: ignore
 
         return True
+
+    def on_rollout_end(self):
+        net_worth = self.training_env.buf_infos[0]['net_worth']
+        if net_worth > self.best_net_worth:
+            self.best_net_worth = net_worth
+            save_name = f"{self.save_path}_net_worth"
+            if self.verbose:
+                print("Best net worth: {:.2f} - Last net worth: {:.2f}".format(self.best_net_worth, net_worth))
+                print(f"Saving new best net worth to {save_name}")
+            self.model.save(save_name)  # type: ignore

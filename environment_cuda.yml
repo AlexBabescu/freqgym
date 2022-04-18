@@ -80,3 +80,4 @@ dependencies:
         - freqtrade
         - stable-baselines3
         - sb3-contrib
+        - tensortrade
